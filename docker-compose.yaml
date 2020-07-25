@@ -1,0 +1,63 @@
+version: '3'
+
+services: 
+    app-desafio:
+        build: . #irá buildar apartir do dockerfile que esta na raiz do laravel
+        container_name: app-desafio
+        entrypoint: dockerize -template ./docker/app/.env:.env -wait tcp://db-desafio:3306 -timeout 80s ./docker/entrypoint.sh #quando estamos trabalhando com dockerize no entrypoint temos que informar o comando que ele irá executar depois que o serviço estar no ar
+        environment: 
+            - DB_HOST=db-desafio
+            - DB_DATABASE=laravel
+            - DB_USERNAME=root
+            - DB_PASSWORD=root
+        volumes: 
+            - .:/var/www
+        networks:
+            - app-networks 
+        user: www-data
+        depends_on: 
+            - db-desafio
+            - redis-desafio
+    nginx-desafio:
+        build: docker/nginx 
+        container_name: nginx-desafio
+        working_dir: /var/www
+        entrypoint: dockerize -template ./docker/nginx/nginx.conf:/etc/nginx/conf.d/nginx.conf -wait tcp://app-desafio:9000 -timeout 40s nginx -g 'daemon off';
+        tty: true 
+        ports: 
+            - "8088:80"
+        volumes: 
+            - .:/var/www
+        networks:
+            - app-networks
+        depends_on:
+            - app-desafio
+        environment: 
+            - NGINX_HOST=app-desafio
+            - NGINX_PORT=9000
+    db-desafio:
+        build: docker/mysql
+        command: --innodb-use-native-aio=0 
+        container_name: db-desafio
+        restart: always
+        tty: true
+        ports: 
+            - "33336:3306"
+        volumes: 
+            - ./docker/dbdata:/var/lib/mysql
+        environment: 
+            - MYSQL_DATABASE=laravel
+            - MYSQL_ROOT_PASSWORD=root
+            - MYSQL_USER=root
+        networks: 
+            - app-networks
+       
+    redis-desafio:
+        image: redis:alpine 
+        expose:
+            - 6379 
+        networks:
+            - app-networks
+networks:  
+    app-networks:
+        driver: bridge
